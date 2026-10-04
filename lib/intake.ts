@@ -4,8 +4,18 @@ export type IntakeQuestion = { key: string; label: string; type: "text" | "yes_n
 export type DocumentRequirement = { key: string; label: string; required: boolean; allowed_extensions: string[]; max_size_mb: number; max_files: number };
 export type IntakeProcess = { slug: string; name: string; fields: Record<string, boolean> | null; documents: DocumentRequirement[]; questions: IntakeQuestion[] };
 export type IntakeFile = { id: string; key: string; name: string; size: number };
-export type IntakeConfiguration = { job: { id: number; title: string; company: string | null; location: string | null; workplace_type: string | null; employment_type: string | null; position_summary: string | null }; processes: IntakeProcess[] };
-export type IntakeReceipt = { submitted: true; submitted_at: string; reference: string };
+export type PublicJob = {
+  id: number; title: string; company: string | null; location?: string | null;
+  workplace_type?: string | null; employment_type?: string | null; position_summary?: string | null;
+  department?: string | null; company_overview?: string | null; responsibilities?: string | null;
+  qualifications?: string | null; benefits?: string | null; equal_opportunity_statement?: string | null;
+  skills?: string[] | null; languages?: string[] | null; years_of_experience?: string | number | null;
+  education_level?: string | null; expiration_date?: string | null;
+  salary?: { min: number | string | null; max: number | string | null; currency: string | null };
+};
+export type IntakeConfiguration = { job: PublicJob; processes: IntakeProcess[] };
+export type IntakeReceipt = { submitted: true; submitted_at: string; reference: string; job: PublicJob };
+export type IntakePending = { verification_pending: true };
 export type IntakeSession = IntakeConfiguration & { submitted: false; email: string; expires_at: string; documents: IntakeFile[] };
 export type ProfileValues = Record<string, string | Record<string, string>[]>;
 export type QuestionAnswers = Record<string, string | boolean | null>;

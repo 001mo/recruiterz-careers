@@ -17,6 +17,7 @@ class LaravelApiError extends Error {
 }
 function route(jar = {}, fetchBackend = async () => ({})) {
   return load('app/api/intake/[job]/[[...path]]/route.ts', {
+    'node:crypto': require('node:crypto'),
     'next/headers': { cookies: async () => ({ get: name => jar[name] ? { value: jar[name] } : undefined }) },
     'next/server': { NextResponse: { json: (data, options) => { const response = Response.json(data, options); response.cookieWrites = []; response.cookies = { set: (...args) => response.cookieWrites.push(args) }; return response; } } },
     '@/lib/intake': intake,
@@ -51,7 +52,7 @@ test('starting verification never exposes the challenge and clears only the cand
   const response = await route({}, async () => ({ challenge: 'secret-challenge', message: 'Check email' })).POST(request('start', { email: 'candidate@example.com' }), context('start'));
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { message: 'Check email' });
-  assert.deepEqual(response.cookieWrites.map(write => write[0]), ['recruiterz_careers_intake_challenge_5', 'recruiterz_careers_intake_5']);
+  assert.deepEqual(response.cookieWrites.map(write => write[0]), ['recruiterz_careers_intake_challenge_5', 'recruiterz_careers_intake_5', 'recruiterz_careers_intake_recovery_5']);
 });
 test('candidate expiry never clears the recruiter authentication cookie', async () => {
   const response = await route({ recruiterz_careers_intake_5: 'expired', recruiterz_token: 'staff-secret' }, async () => { throw new LaravelApiError('Expired', 401, { message: 'Expired' }); }).GET(new Request('https://app.example.com/api/intake/5/session'), context('session'));
@@ -90,4 +91,21 @@ test('multipart body is forwarded with only the candidate token and a bounded pa
 test('candidate client preserves field errors without invoking staff authentication handling', async () => {
   const api = load('lib/intake.ts', { './errors': { safeFetch: async () => Response.json({ message: 'Invalid', errors: { code: ['Invalid code'] } }, { status: 422 }) } });
   await assert.rejects(api.intakeRequest('5', '/verify'), error => error instanceof api.IntakeError && error.errors.code[0] === 'Invalid code');
+});
+
+test('refresh resumes pending verification without exposing any secrets', async () => {
+  const response = await route({ recruiterz_careers_intake_challenge_5: 'secret' }, async () => { throw new Error('No request needed'); })
+    .GET(new Request('https://app.example.com/api/intake/5/session'), context('session'));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { data: { verification_pending: true } });
+});
+test('verification retry identity comes only from the HttpOnly cookie', async () => {
+  const recovery = 'a'.repeat(64);
+  const response = await route({ recruiterz_careers_intake_challenge_5: 'challenge', recruiterz_careers_intake_recovery_5: recovery }, async (url, options) => {
+    assert.equal(JSON.parse(options.body).recovery_key, recovery);
+    return { token: 'session-secret', data: { submitted: false } };
+  }).POST(request('verify', { code: '123456', recovery_key: 'forged' }), context('verify'));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { data: { submitted: false } });
+  assert.equal(response.cookieWrites.find(row => row[0].includes('recovery'))[2].maxAge, 0);
 });

@@ -49,10 +49,11 @@ For a Cloudflare tunnel, point the tunnel to port 3001 and set `APP_ORIGIN` to i
 | Route | Behavior |
 | --- | --- |
 | `/` | Responsive Careers entry page explaining how to apply through an employer's job link |
+| `/jobs/[job]` | Public job details, visible salary, requirements, and the application link |
 | `/apply/[job]` | Existing verified candidate application journey for a positive numeric job ID |
 | `/api/intake/[job]/...` | Allowlisted BFF for the existing Laravel candidate-intake endpoints |
 
-The application flow supports email verification, configured profile fields, questions, private document upload/removal, submission, and a submission receipt. Open `/apply/123` with an actual eligible job ID from your backend; the app does not include sample employers or jobs.
+Recruiters configure and publish a job, then use **Copy Careers link** on the completion screen or job detail page. The link opens `/jobs/{id}` and leads to the verified application flow. Set Laravel `CAREERS_URL` to this app’s browser-facing origin (locally `http://localhost:3001`); it is separate from Laravel `FRONTEND_URL`. Restart/reload Laravel configuration after changing it. The app uses actual backend jobs and has no sample employers.
 
 The intake journey was adapted from `recruiterz-app` commit `c468153c11dda61ca7c9cd29197d67349c966a19`. It calls `/candidates/jobs/{job}/intake` and its existing `start`, `verify`, `session`, `documents`, and `submit` actions. Laravel remains responsible for job eligibility, validation, rate limits, duplicate prevention, and pipeline processing. Run the existing Laravel app with its database migrations and working Mailgun configuration to use the flow end to end.
 
@@ -64,8 +65,10 @@ The intake journey was adapted from `recruiterz-app` commit `c468153c11dda61ca7c
 - Production server failures display `Something went wrong`. Validation feedback uses the shared MessagePopup component.
 - Application pages use `noindex` metadata and are excluded by robots rules. These directives do not replace backend authorization.
 - The application header uses the employer name when available. `components/careers-shell.tsx` and the `--brand-*` CSS variables provide the visual foundation for future employer branding. Tenant branding settings are not implemented yet.
-- Text answers currently stay in page memory until submission; uploads and the verified session can be recovered while the intake remains valid. Draft autosave is not implemented.
-- The old recruiter app's application route remains untouched. Update generated/shared application links when the careers deployment is ready; this initialization does not cut over production traffic.
+- Form values are saved immediately in **sessionStorage**, bound to the job, verified email, session expiry, and form definition. Refreshing the same tab restores them; expired or replaced sessions discard them. This is not cross-device or cross-tab draft storage. Storage failures show a warning. Submission clears the draft. Credentials and verification codes never enter browser storage.
+- Refreshing during email verification resumes the code entry step. A BFF-only recovery secret allows a lost verification response to recover the original session within the code’s ten-minute window. The code alone remains single-use.
+- After an interrupted mutation, the app reads the server’s state to recover a receipt or uploaded-file list before offering a retry. Repeated submission returns the same receipt. A receipt remains recoverable by a valid session even after the job closes.
+- Recruiter links use the backend-provided Careers URL. The old recruiter application route remains available for previously shared links. Public availability follows open status, expiry, and remaining openings. Internal notes, pipeline instructions, preferred answers, and hidden salary ranges never enter the public response.
 
 ## Commands
 
@@ -82,8 +85,8 @@ npm start
 
 ## Next increments
 
-1. Employer careers pages and public job details, backed by explicit public visibility rules.
+1. Employer careers pages and branding settings.
 2. Candidate application progress and tasks, with a separate public view of the internal pipeline.
-3. Employer branding settings, draft recovery, and deployment/link cutover.
+3. Server-saved drafts for recovery across devices and sessions.
 
 There is no cross-company marketplace, global candidate account, public company-directory endpoint, or post-submission tracking API in this initialization.

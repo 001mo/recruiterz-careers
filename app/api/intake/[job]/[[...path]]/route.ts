@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { resolveIntakeRoute } from "@/lib/intake";
 import { unexpectedErrorMessage } from "@/lib/errors";
@@ -41,8 +42,12 @@ async function handler(request: Request, context: { params: Promise<{ job: strin
   const jar = await cookies();
   const tokenName = `recruiterz_careers_intake_${job}`;
   const challengeName = `recruiterz_careers_intake_challenge_${job}`;
+  const recoveryName = `recruiterz_careers_intake_recovery_${job}`;
   const token = jar.get(tokenName)?.value;
   const cookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict" as const, path: `/api/intake/${job}/` };
+  if (action === "session" && !token && jar.get(challengeName)?.value) {
+    return finish(NextResponse.json({ data: { verification_pending: true } }));
+  }
   if (action && !["start", "verify"].includes(action) && !token) return finish(NextResponse.json({ message: "Verify your email to continue." }, { status: 401 }));
   try {
     let body: BodyInit | undefined;
@@ -60,7 +65,7 @@ async function handler(request: Request, context: { params: Promise<{ job: strin
           payload = JSON.parse(new TextDecoder().decode(bytes));
           if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error();
         } catch { return finish(NextResponse.json({ message: "Invalid request." }, { status: 400 })); }
-        body = JSON.stringify(action === "verify" ? { code: payload.code, challenge: jar.get(challengeName)?.value } : payload);
+        body = JSON.stringify(action === "verify" ? { code: payload.code, challenge: jar.get(challengeName)?.value, recovery_key: jar.get(recoveryName)?.value } : payload);
         headers.set("Content-Type", "application/json");
       }
     }
@@ -71,10 +76,12 @@ async function handler(request: Request, context: { params: Promise<{ job: strin
     if (action === "start" && challenge) {
       response.cookies.set(challengeName, challenge, { ...cookieOptions, maxAge: 600 });
       response.cookies.set(tokenName, "", { ...cookieOptions, maxAge: 0 });
+      response.cookies.set(recoveryName, randomBytes(32).toString("hex"), { ...cookieOptions, maxAge: 600 });
     }
     if (action === "verify" && nextToken) {
       response.cookies.set(tokenName, nextToken, { ...cookieOptions, maxAge: 86400 });
       response.cookies.set(challengeName, "", { ...cookieOptions, maxAge: 0 });
+      response.cookies.set(recoveryName, "", { ...cookieOptions, maxAge: 0 });
     }
     return finish(response);
   } catch (error) {
