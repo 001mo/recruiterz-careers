@@ -1,0 +1,21 @@
+"use client";
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
+import { IntakeError } from "@/lib/intake";
+
+export default function Providers({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
+        retry: (count, error) => !(error instanceof IntakeError && error.status < 500) && count < 1,
+      },
+      mutations: { retry: false },
+    },
+  }));
+
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+}
