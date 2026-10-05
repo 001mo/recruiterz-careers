@@ -26,7 +26,9 @@ export class IntakeError extends Error {
 
 // Candidate authentication is independent of the recruiter's signed-in session.
 export async function intakeRequest<T>(job: string, path = "", options: RequestInit = {}): Promise<T> {
-  const response = await safeFetch(`/api/intake/${job}${path}`, { ...options, cache: "no-store", headers: options.body instanceof FormData ? options.headers : { "Content-Type": "application/json", ...options.headers } });
+  const timeout = AbortSignal.timeout(40_000);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  const response = await safeFetch(`/api/intake/${job}${path}`, { ...options, signal, cache: "no-store", headers: options.body instanceof FormData ? options.headers : { "Content-Type": "application/json", ...options.headers } });
   const body = await response.json().catch(() => null);
   if (!response.ok) throw new IntakeError(body?.message ?? "Something went wrong", response.status, body?.errors ?? {});
   if (!body) throw new Error("Something went wrong");

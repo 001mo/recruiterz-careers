@@ -20,6 +20,7 @@ export default function ApplicationJourney({ jobId }: { jobId: string }) {
   const [receipt, setReceipt] = useState<IntakeReceipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
@@ -69,7 +70,12 @@ export default function ApplicationJourney({ jobId }: { jobId: string }) {
           else setConfiguration(data);
         }
       })
-      .catch(err => { if (!signal?.aborted) setLoadError(err instanceof IntakeError ? err.message : unexpectedErrorMessage(err)); })
+      .catch(err => {
+        if (!signal?.aborted) {
+          setUnavailable(err instanceof IntakeError && err.status === 404);
+          setLoadError(err instanceof IntakeError ? err.message : unexpectedErrorMessage(err));
+        }
+      })
       .finally(() => { if (!signal?.aborted) setLoading(false); });
   }, [jobId, acceptSession]);
 
@@ -79,21 +85,29 @@ export default function ApplicationJourney({ jobId }: { jobId: string }) {
     return () => controller.abort();
   }, [load]);
 
-  async function run(work: () => Promise<void>, verifying = false) {
+  async function run(work: () => Promise<void>, action: "start" | "verify" | "submit" | "upload" | "remove") {
     if (working.current) return;
     working.current = true;
     setBusy(true); setError([]);
     try { await work(); }
     catch (err) {
       // Read authoritative state after a lost response; never blindly re-upload.
-      if (!(err instanceof IntakeError) || err.status >= 500 || err.status === 409) {
+      if (!(err instanceof IntakeError) || err.status >= 500 || err.status === 409 || (action === "remove" && err.status === 404)) {
         try {
           const { data } = await intakeRequest<{ data: IntakeSession | IntakeReceipt | IntakePending }>(jobId, "/session");
-          if ("submitted" in data) {
-            acceptSession(data, verifying);
-            if (data.submitted || verifying) return;
+          if (action === "start") {
+            if ("verification_pending" in data) { setCodeSent(true); return; }
+          } else if ("submitted" in data) {
+            acceptSession(data, action === "verify");
+            if (data.submitted || action === "verify") return;
+            if (action === "upload" && data.documents.some(file => !session?.documents.some(previous => previous.id === file.id))) return;
+            if (action === "remove" && session?.documents.some(file => !data.documents.some(current => current.id === file.id))) return;
           }
         } catch { /* Preserve the original error and the unsent draft. */ }
+      }
+      if (err instanceof IntakeError && err.status === 404 && action !== "remove") {
+        setUnavailable(true); setLoadError("This role may have closed or stopped accepting applications.");
+        return;
       }
       setError(err instanceof IntakeError ? Object.values(err.errors).flat().length ? Object.values(err.errors).flat() : [err.message] : [unexpectedErrorMessage(err)]);
       if (err instanceof IntakeError && [401, 409].includes(err.status)) { setSession(null); setCodeSent(false); setCode(""); }
@@ -105,7 +119,7 @@ export default function ApplicationJourney({ jobId }: { jobId: string }) {
       const body = new FormData(); body.set("key", key); body.set("file", file);
       const result = await intakeRequest<{ data: IntakeFile }>(jobId, "/documents", { method: "POST", body });
       setSession(current => current && { ...current, documents: [...current.documents, result.data] });
-    });
+    }, "upload");
   }
 
   const job = receipt?.job ?? configuration?.job;
@@ -116,17 +130,17 @@ export default function ApplicationJourney({ jobId }: { jobId: string }) {
       <div className="mb-8"><p className="text-sm font-semibold text-brand-600">{job?.company ?? "Your next opportunity"}</p><h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{receipt ? "Application received" : job?.title ?? "Apply for this role"}</h1>{job && <p className="mt-3 text-sm text-slate-500">{[job.employment_type, job.workplace_type, job.location].filter(Boolean).join(" · ")}</p>}</div>
       <ol aria-label="Application progress" className="mb-8 grid grid-cols-3 gap-3">{["Verify email", "Your application", "Submitted"].map((name, i) => <li key={name} aria-current={step === i + 1 ? "step" : undefined} className={`border-t-2 pt-3 text-xs font-semibold sm:text-sm ${step >= i + 1 ? "border-brand-600 text-brand-700" : "border-slate-200 text-slate-400"}`}><span className="mr-2">{i + 1}.</span>{name}</li>)}</ol>
       {loading ? <div role="status" className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">Loading application…</div>
-        : loadError ? <section className="rounded-2xl border border-slate-200 bg-white p-8"><h2 className="text-lg font-bold">Could not load this application</h2><p role="alert" className="my-4 text-sm text-slate-600">{loadError}</p><button className={secondary} onClick={() => { setLoading(true); setLoadError(""); void load(); }}>Try again</button></section>
+        : loadError ? <section className="rounded-2xl border border-slate-200 bg-white p-8"><h2 className="text-lg font-bold">{unavailable ? "This job is unavailable" : "Could not load this application"}</h2><p role="alert" className="my-4 text-sm text-slate-600">{unavailable ? "This role may have closed or stopped accepting applications." : loadError}</p>{unavailable && session && <p className="mb-4 text-sm text-slate-500">Your application has not been submitted. You can check again if the role reopens before your session expires.</p>}<button className={secondary} onClick={() => { setLoading(true); setLoadError(""); setUnavailable(false); void load(); }}>{unavailable ? "Check availability" : "Try again"}</button></section>
         : receipt ? <ApplicationReceipt receipt={receipt} />
         : !session ? <section className="rounded-2xl border border-slate-200 bg-white p-7 sm:p-10">
           <h2 className="text-xl font-bold">{codeSent ? "Check your inbox" : "Let’s start with your email"}</h2><p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">{codeSent ? `Enter the six-digit code sent to ${email || "your email address"}. It expires in 10 minutes.` : "We’ll send you a verification code so your application is connected to the right email address."}</p>
           <form noValidate className="mt-6 max-w-md" onSubmit={event => { event.preventDefault(); void run(async () => {
             if (codeSent) acceptSession((await intakeRequest<{ data: IntakeSession | IntakeReceipt }>(jobId, "/verify", { method: "POST", body: JSON.stringify({ code }) })).data);
             else { await intakeRequest(jobId, "/start", { method: "POST", body: JSON.stringify({ email: email.trim() }) }); setCodeSent(true); }
-          }, codeSent); }}><fieldset disabled={busy}><label className="text-sm font-semibold text-slate-600">{codeSent ? "Verification code" : "Email address"}<input className={input} type={codeSent ? "text" : "email"} autoComplete={codeSent ? "one-time-code" : "email"} inputMode={codeSent ? "numeric" : "email"} maxLength={codeSent ? 6 : 254} value={codeSent ? code : email} onChange={event => codeSent ? setCode(event.target.value.replace(/\D/g, "")) : setEmail(event.target.value)} required /></label><div className="mt-5 flex flex-wrap gap-3"><button className={button} type="submit">{busy ? "Please wait…" : codeSent ? "Verify and continue" : "Send verification code"}</button>{codeSent && <button className={secondary} type="button" onClick={() => { setCodeSent(false); setCode(""); }}>Change email / resend</button>}</div></fieldset></form>
+          }, codeSent ? "verify" : "start"); }}><fieldset disabled={busy}><label className="text-sm font-semibold text-slate-600">{codeSent ? "Verification code" : "Email address"}<input className={input} type={codeSent ? "text" : "email"} autoComplete={codeSent ? "one-time-code" : "email"} inputMode={codeSent ? "numeric" : "email"} maxLength={codeSent ? 6 : 254} value={codeSent ? code : email} onChange={event => codeSent ? setCode(event.target.value.replace(/\D/g, "")) : setEmail(event.target.value)} required /></label><div className="mt-5 flex flex-wrap gap-3"><button className={button} type="submit">{busy ? "Please wait…" : codeSent ? "Verify and continue" : "Send verification code"}</button>{codeSent && <button className={secondary} type="button" onClick={() => { setCodeSent(false); setCode(""); setError([]); }}>Change email / resend</button>}</div></fieldset></form>
         </section> : <form noValidate onSubmit={event => { event.preventDefault(); void run(async () => {
           acceptSession((await intakeRequest<{ data: IntakeReceipt }>(jobId, "/submit", { method: "POST", body: JSON.stringify({ profile: { ...profile, email: session.email }, answers }) })).data);
-        }); }}><fieldset disabled={busy} className="space-y-6"><legend className="sr-only">Application details</legend>
+        }, "submit"); }}><fieldset disabled={busy} className="space-y-6"><legend className="sr-only">Application details</legend>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4"><p className="break-all text-sm text-emerald-800">Email verified · <strong>{session.email}</strong></p><span className="text-xs text-emerald-700">Required fields are marked *</span></div>
           {session.processes.map(process => {
             if (process.slug.includes("questions") || process.slug === "applying.questionnaire") {
@@ -138,7 +152,7 @@ export default function ApplicationJourney({ jobId }: { jobId: string }) {
             return <section key={process.slug} className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8"><h2 className="text-lg font-bold">Documents</h2><p className="mt-2 text-sm text-slate-500">Uploaded files are shared privately with the hiring team.</p><div className="mt-6 space-y-6">{process.documents.map(slot => {
               const files = session.documents.filter(file => file.key === slot.key);
               return <div key={slot.key}><label className="block text-sm font-semibold text-slate-700">{slot.label} {slot.required ? <span className="text-brand-600">*</span> : <span className="text-xs font-normal text-slate-400">(optional)</span>}<span className="mt-1 block text-xs font-normal text-slate-400">{slot.allowed_extensions.join(", ").toUpperCase()} · Up to {slot.max_size_mb} MB each · {slot.max_files} {slot.max_files === 1 ? "file" : "files"}</span><input type="file" accept={slot.allowed_extensions.map(ext => `.${ext}`).join(",")} disabled={busy || files.length >= slot.max_files} className="mt-3 block w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-brand-100 file:px-3 file:py-2 file:font-semibold file:text-brand-700 disabled:opacity-40" onChange={event => { const file = event.target.files?.[0]; if (file) void upload(slot.key, file); event.target.value = ""; }} /></label>
-                {files.map(file => <div key={file.id} className="mt-3 flex items-center justify-between gap-4 rounded-lg bg-slate-50 px-4 py-3"><span className="min-w-0 break-all text-sm text-slate-600">{file.name}<span className="ml-2 text-xs text-slate-400">{Math.ceil(file.size / 1024)} KB</span></span><button className="shrink-0 text-xs font-semibold text-rose-600" type="button" aria-label={`Remove ${file.name}`} onClick={() => void run(async () => { await intakeRequest(jobId, `/documents/${file.id}`, { method: "DELETE" }); setSession(current => current && { ...current, documents: current.documents.filter(item => item.id !== file.id) }); })}>Remove</button></div>)}
+                {files.map(file => <div key={file.id} className="mt-3 flex items-center justify-between gap-4 rounded-lg bg-slate-50 px-4 py-3"><span className="min-w-0 break-all text-sm text-slate-600">{file.name}<span className="ml-2 text-xs text-slate-400">{Math.ceil(file.size / 1024)} KB</span></span><button className="shrink-0 text-xs font-semibold text-rose-600" type="button" aria-label={`Remove ${file.name}`} onClick={() => void run(async () => { await intakeRequest(jobId, `/documents/${file.id}`, { method: "DELETE" }); setSession(current => current && { ...current, documents: current.documents.filter(item => item.id !== file.id) }); }, "remove")}>Remove</button></div>)}
               </div>;
             })}</div></section>;
           })}

@@ -109,3 +109,40 @@ test('verification retry identity comes only from the HttpOnly cookie', async ()
   assert.deepEqual(await response.json(), { data: { submitted: false } });
   assert.equal(response.cookieWrites.find(row => row[0].includes('recovery'))[2].maxAge, 0);
 });
+
+test('expired verification cookie offers a new code without proxying missing credentials', async () => {
+  const response = await route({}, async () => { throw new Error('Must not proxy'); })
+    .POST(request('verify', { code: '123456' }), context('verify'));
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).errors.code[0], /expired.*Request a new code/);
+  assert.equal(response.cookieWrites.length, 0);
+});
+test('intake proxy bounds stalled requests and preserves sessions for a retry', async t => {
+  t.mock.method(AbortSignal, 'timeout', milliseconds => {
+    assert.equal(milliseconds, 30_000);
+    return AbortSignal.abort(new DOMException('Timed out', 'TimeoutError'));
+  });
+  const response = await route({ recruiterz_careers_intake_5: 'candidate-token' }, async (url, options) => {
+    options.signal.throwIfAborted();
+  }).POST(request('submit', { profile: {} }), context('submit'));
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { message: 'Something went wrong' });
+  assert.equal(response.cookieWrites.length, 0);
+});
+test('rate limits leave verification retryable with actionable feedback', async () => {
+  const response = await route({}, async () => { throw new LaravelApiError('Too Many Attempts.', 429, null); })
+    .POST(request('start', { email: 'candidate@example.test' }), context('start'));
+  assert.equal(response.status, 429);
+  assert.match((await response.json()).message, /wait before trying again/);
+  assert.equal(response.cookieWrites.length, 0);
+});
+test('client requests honor cancellation and cannot stay pending indefinitely', async t => {
+  t.mock.method(AbortSignal, 'timeout', milliseconds => {
+    assert.equal(milliseconds, 40_000);
+    return AbortSignal.abort(new DOMException('Timed out', 'TimeoutError'));
+  });
+  const api = load('lib/intake.ts', { './errors': { safeFetch: async (url, options) => {
+    assert.equal(options.cache, 'no-store'); options.signal.throwIfAborted();
+  } } });
+  await assert.rejects(api.intakeRequest('5', '/submit'), { name: 'TimeoutError' });
+});

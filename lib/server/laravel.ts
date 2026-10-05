@@ -39,6 +39,7 @@ export async function laravelFetch<T>(path: string, options: LaravelRequestOptio
     ...requestOptions,
     headers: requestHeaders,
     cache: "no-store",
+    redirect: "error",
   });
 
   const payload = await response.json().catch(() => null);

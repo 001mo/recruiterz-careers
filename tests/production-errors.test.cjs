@@ -39,3 +39,22 @@ test('production redacts server failures while preserving candidate validation f
   process.env.NODE_ENV = 'development';
   assert.equal(new LaravelApiError('Development detail', 500, null).message, 'Development detail');
 });
+
+test('backend calls reject redirects and handle non-JSON outages safely', async t => {
+  const previousUrl = process.env.LARAVEL_API_URL;
+  const previousEnv = process.env.NODE_ENV;
+  process.env.LARAVEL_API_URL = 'https://backend.example.test'; process.env.NODE_ENV = 'production';
+  t.after(() => {
+    if (previousUrl === undefined) delete process.env.LARAVEL_API_URL; else process.env.LARAVEL_API_URL = previousUrl;
+    if (previousEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousEnv;
+  });
+  const errors = load('lib/errors.ts');
+  const api = load('lib/server/laravel.ts', { 'server-only': {}, '@/lib/errors': errors });
+  t.mock.method(global, 'fetch', async (url, options) => {
+    assert.equal(url, 'https://backend.example.test/candidates/jobs/5/intake');
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.cache, 'no-store');
+    return new Response('<html>Internal service details</html>', { status: 502 });
+  });
+  await assert.rejects(api.laravelFetch('/candidates/jobs/5/intake'), error => error.status === 502 && error.message === 'Something went wrong' && !JSON.stringify(error.payload).includes('Internal'));
+});

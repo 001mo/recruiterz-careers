@@ -70,6 +70,9 @@ The intake journey was adapted from `recruiterz-app` commit `c468153c11dda61ca7c
 - After an interrupted mutation, the app reads the server’s state to recover a receipt or uploaded-file list before offering a retry. Repeated submission returns the same receipt. A receipt remains recoverable by a valid session even after the job closes.
 - The receipt explicitly names the role and employer, shows the received time, and provides an application reference that also appears in the recruiter review workspace. Laravel supplies the reference and recorded application time; refresh, repeated submission, and later email verification do not create a new receipt identity. The receipt contains no internal pipeline or evaluator information.
 - Recruiter links use the backend-provided Careers URL. The old recruiter application route remains available for previously shared links. Public availability follows open status, expiry, and remaining openings. Internal notes, pipeline instructions, preferred answers, and hidden salary ranges never enter the public response.
+- Unavailable links and jobs that close during an application show **This job is unavailable** and **Check availability**. A pause preserves the verified session, uploads, and same-tab draft until expiry; reopening resumes that application. Draft/unpublished job details remain private.
+- Expired verification cookies offer a new code instead of exposing internal challenge validation. Invalid codes, required fields, rejected uploads, and rate limits leave a usable retry path. Failed submissions retain entered answers. A recovered upload or removal updates the file list without asking the candidate to repeat the completed operation.
+- Intake calls time out after 30 seconds at the BFF and 40 seconds in the browser. Backend redirects are rejected. These limits release the busy controls; they do not imply a mutation failed to commit, so recovery still checks Laravel before retrying.
 
 ## Commands
 

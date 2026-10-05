@@ -45,6 +45,10 @@ async function handler(request: Request, context: { params: Promise<{ job: strin
   const recoveryName = `recruiterz_careers_intake_recovery_${job}`;
   const token = jar.get(tokenName)?.value;
   const cookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict" as const, path: `/api/intake/${job}/` };
+  if (action === "verify" && !jar.get(challengeName)?.value) {
+    const message = "Your verification code has expired. Request a new code and try again.";
+    return finish(NextResponse.json({ message, errors: { code: [message] } }, { status: 422 }));
+  }
   if (action === "session" && !token && jar.get(challengeName)?.value) {
     return finish(NextResponse.json({ data: { verification_pending: true } }));
   }
@@ -69,7 +73,7 @@ async function handler(request: Request, context: { params: Promise<{ job: strin
         headers.set("Content-Type", "application/json");
       }
     }
-    const payload = await laravelFetch<{ token?: string; challenge?: string; data?: unknown; message?: string }>(path, { method: request.method, body, headers, token: ["start", "verify"].includes(action) ? undefined : token });
+    const payload = await laravelFetch<{ token?: string; challenge?: string; data?: unknown; message?: string }>(path, { method: request.method, body, headers, signal: AbortSignal.timeout(30_000), token: ["start", "verify"].includes(action) ? undefined : token });
     // Secret values cross only the server boundary and HttpOnly cookies.
     const { token: nextToken, challenge, ...visible } = payload;
     const response = NextResponse.json(visible, { status: request.method === "POST" && ["start", "documents"].includes(action) ? 201 : 200 });
@@ -86,7 +90,8 @@ async function handler(request: Request, context: { params: Promise<{ job: strin
     return finish(response);
   } catch (error) {
     if (error instanceof LaravelApiError) {
-      const response = NextResponse.json(error.payload ?? { message: error.message }, { status: error.status });
+      const payload = error.status === 429 ? { message: "Too many attempts. Please wait before trying again." } : error.payload ?? { message: error.message };
+      const response = NextResponse.json(payload, { status: error.status });
       if (error.status === 401) response.cookies.set(tokenName, "", { ...cookieOptions, maxAge: 0 });
       return finish(response);
     }
