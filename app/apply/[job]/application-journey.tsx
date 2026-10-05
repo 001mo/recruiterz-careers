@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { readDraft, saveDraft, clearDraft } from "@/lib/intake-draft";
 import CareersShell from "@/components/careers-shell";
+import ApplicationReceipt from "@/components/application-receipt";
 import MessagePopup from "@/components/ui/message-popup";
 import { ProfileFields, QuestionFields } from "@/components/applications/intake-fields";
 import { IntakeError, intakeRequest, type IntakeConfiguration, type IntakeFile, type IntakeReceipt, type IntakeSession, type IntakePending, type ProfileValues, type QuestionAnswers } from "@/lib/intake";
@@ -116,7 +117,7 @@ export default function ApplicationJourney({ jobId }: { jobId: string }) {
       <ol aria-label="Application progress" className="mb-8 grid grid-cols-3 gap-3">{["Verify email", "Your application", "Submitted"].map((name, i) => <li key={name} aria-current={step === i + 1 ? "step" : undefined} className={`border-t-2 pt-3 text-xs font-semibold sm:text-sm ${step >= i + 1 ? "border-brand-600 text-brand-700" : "border-slate-200 text-slate-400"}`}><span className="mr-2">{i + 1}.</span>{name}</li>)}</ol>
       {loading ? <div role="status" className="rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500">Loading application…</div>
         : loadError ? <section className="rounded-2xl border border-slate-200 bg-white p-8"><h2 className="text-lg font-bold">Could not load this application</h2><p role="alert" className="my-4 text-sm text-slate-600">{loadError}</p><button className={secondary} onClick={() => { setLoading(true); setLoadError(""); void load(); }}>Try again</button></section>
-        : receipt ? <section className="rounded-2xl border border-emerald-200 bg-white p-7 sm:p-10"><span aria-hidden="true" className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-2xl text-emerald-600">✓</span><h2 className="text-xl font-bold">Thank you for applying</h2><p className="mt-3 leading-7 text-slate-600">Your application has been received. The hiring team can now review your information.</p><p className="mt-5 text-sm text-slate-500">Received {new Date(receipt.submitted_at).toLocaleString()}</p><p className="mt-2 break-all text-xs text-slate-400">Reference: {receipt.reference}</p><p className="mt-6 text-sm text-slate-500">You can safely close this page.</p></section>
+        : receipt ? <ApplicationReceipt receipt={receipt} />
         : !session ? <section className="rounded-2xl border border-slate-200 bg-white p-7 sm:p-10">
           <h2 className="text-xl font-bold">{codeSent ? "Check your inbox" : "Let’s start with your email"}</h2><p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">{codeSent ? `Enter the six-digit code sent to ${email || "your email address"}. It expires in 10 minutes.` : "We’ll send you a verification code so your application is connected to the right email address."}</p>
           <form noValidate className="mt-6 max-w-md" onSubmit={event => { event.preventDefault(); void run(async () => {
