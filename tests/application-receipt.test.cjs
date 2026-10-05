@@ -20,6 +20,7 @@ test('the receipt names the exact role and employer and preserves the server ref
   assert.match(html, /Product Designer/);
   assert.match(html, /Example Employer/);
   assert.match(html, /A1B2C3D4/);
+  assert.match(html, /href="\/applications\/7"/);
   assert.match(html, /dateTime="2026-10-05T12:30:00\+00:00"/);
   assert.match(html, /no need to submit your application again/);
   assert.equal(render(), html);

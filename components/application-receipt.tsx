@@ -1,4 +1,5 @@
 import type { IntakeReceipt } from "@/lib/intake";
+import Link from "next/link";
 
 export default function ApplicationReceipt({ receipt }: { receipt: IntakeReceipt }) {
   return <section aria-label="Application receipt" className="rounded-2xl border border-emerald-200 bg-white p-7 sm:p-10">
@@ -12,5 +13,6 @@ export default function ApplicationReceipt({ receipt }: { receipt: IntakeReceipt
       <div><dt className="text-slate-500">Application reference</dt><dd className="mt-1 break-all font-mono text-xs text-slate-700">{receipt.reference}</dd></div>
     </dl>
     <p className="mt-6 text-sm leading-6 text-slate-500">Keep this reference for your records. You can safely close this page; there is no need to submit your application again.</p>
+    <Link href={`/applications/${receipt.job.id}`} className="mt-5 inline-flex rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white hover:bg-brand-700">View application status</Link>
   </section>;
 }

@@ -38,8 +38,8 @@ export async function intakeRequest<T>(job: string, path = "", options: RequestI
 export function resolveIntakeRoute(job: string, parts: string[], method: string) {
   if (!/^[1-9]\d*$/.test(job)) return null;
   const path = parts.join("/");
-  if ((method === "GET" && ["", "session"].includes(path)) ||
-    (method === "POST" && ["start", "verify", "documents", "submit"].includes(path)) ||
+  if ((method === "GET" && ["", "session", "progress"].includes(path)) ||
+    (method === "POST" && ["start", "access", "verify", "documents", "submit", "withdraw"].includes(path)) ||
     (method === "DELETE" && parts.length === 2 && parts[0] === "documents" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parts[1]))) {
     return `/candidates/jobs/${job}/intake${path ? `/${path}` : ""}`;
   }

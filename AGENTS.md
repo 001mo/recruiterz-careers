@@ -8,7 +8,7 @@ Candidate-facing Next.js app. Work on `main` unless the user requests another br
 - Applicant secrets belong only in job-scoped HttpOnly cookies. Never use a recruiter token, public environment variable, localStorage, or URL for an applicant token.
 - Preserve the explicit APP_ORIGIN policy for writes, including HTTPS tunnels. Never trust arbitrary forwarded headers.
 - Return "Something went wrong" for unexpected production failures. Show validation feedback through MessagePopup and offer retries where appropriate.
-- Do not invent employers, jobs, application states, or backend endpoints. Company careers pages and post-submission tracking are follow-up work.
+- Do not invent employers, jobs, application states, or backend endpoints. Company careers pages and later-stage candidate tasks are follow-up work. Post-submission progress uses the explicit backend public projection.
 - Run `npm run check` and `npm run build` before publishing changes. Keep Windows-compatible npm scripts.
 
 <!-- BEGIN:nextjs-agent-rules -->

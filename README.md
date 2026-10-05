@@ -51,11 +51,12 @@ For a Cloudflare tunnel, point the tunnel to port 3001 and set `APP_ORIGIN` to i
 | `/` | Responsive Careers entry page explaining how to apply through an employer's job link |
 | `/jobs/[job]` | Public job details, visible salary, requirements, and the application link |
 | `/apply/[job]` | Existing verified candidate application journey for a positive numeric job ID |
+| `/applications/[job]` | Email-verified public application status and withdrawal, including after a job closes |
 | `/api/intake/[job]/...` | Allowlisted BFF for the existing Laravel candidate-intake endpoints |
 
 Recruiters configure and publish a job, then use **Copy Careers link** on the completion screen or job detail page. The link opens `/jobs/{id}` and leads to the verified application flow. Set Laravel `CAREERS_URL` to this app’s browser-facing origin (locally `http://localhost:3001`); it is separate from Laravel `FRONTEND_URL`. Restart/reload Laravel configuration after changing it. The app uses actual backend jobs and has no sample employers.
 
-The intake journey was adapted from `recruiterz-app` commit `c468153c11dda61ca7c9cd29197d67349c966a19`. It calls `/candidates/jobs/{job}/intake` and its existing `start`, `verify`, `session`, `documents`, and `submit` actions. Laravel remains responsible for job eligibility, validation, rate limits, duplicate prevention, and pipeline processing. Run the existing Laravel app with its database migrations and working Mailgun configuration to use the flow end to end.
+The intake journey was adapted from `recruiterz-app` commit `c468153c11dda61ca7c9cd29197d67349c966a19`. It calls `/candidates/jobs/{job}/intake` and its existing `start`, `verify`, `session`, `documents`, and `submit` actions, plus `access`, `progress`, and `withdraw` for submitted applications. Laravel remains responsible for job eligibility, validation, rate limits, duplicate prevention, and pipeline processing. Run the existing Laravel app with its database migrations and working Mailgun configuration to use the flow end to end.
 
 ## Boundaries and conventions
 
@@ -87,10 +88,29 @@ npm start
 
 `check` runs lint, Next.js type generation, TypeScript, and the focused intake/origin/error regressions. Run the production build separately. The scripts work in Windows shells without POSIX environment assignments.
 
+## Application progress
+
+The receipt and public job page link to the public status page. With no valid
+candidate session, the page asks for the original application email and a six-digit
+code. A neutral lookup response avoids disclosing whether that email applied.
+Refreshing during verification resumes code entry. Re-verification works even
+after the job closes or an old intake session is pruned.
+
+Candidates see Application received, Under review, Hired, Not selected, or Withdrawn.
+Internal stage names, reviews, scorecards, and decision reasons stay private. There
+are no candidate tasks during screening. Active applications can be withdrawn
+through a confirmation dialog; lost responses recover authoritative state before
+a retry, and repeat withdrawal produces one backend event.
+
+Status emails use Laravel's configured sender and link to `/applications/{job}`
+without an access token. Backend deployment requires the `candidate_notifications`
+migration and its scheduler/queue worker. The backend's `docs/candidate-progress.md`
+contains deployment and live verification requirements.
+
 ## Next increments
 
 1. Employer careers pages and branding settings.
-2. Candidate application progress and tasks, with a separate public view of the internal pipeline.
+2. Candidate tasks for later stages, such as interview scheduling and assessments.
 3. Server-saved drafts for recovery across devices and sessions.
 
-There is no cross-company marketplace, global candidate account, public company-directory endpoint, or post-submission tracking API in this initialization.
+There is no cross-company marketplace, global candidate account, or public company-directory endpoint.

@@ -22,7 +22,7 @@ export default function JobDetails({ jobId }: { jobId: string }) {
       {query.isPending ? <p role="status">Loading job details…</p> : query.error ?
         <section className="rounded-2xl border border-slate-200 bg-white p-8"><h1 className="text-2xl font-bold">{unavailable ? "This job is unavailable" : "Could not load this job"}</h1>
           <p role="alert" className="mt-4 text-slate-600">{unavailable ? "This role may have closed or stopped accepting applications." : unexpectedErrorMessage(query.error)}</p>
-          <button className={`${button} mt-6`} onClick={() => void query.refetch()}>Try again</button></section> : job && <>
+          <button className={`${button} mt-6`} onClick={() => void query.refetch()}>Try again</button><Link className="mt-6 block text-sm font-semibold text-brand-600" href={`/applications/${jobId}`}>Already applied? View your application</Link></section> : job && <>
           <header className="rounded-2xl border border-slate-200 bg-white p-7 sm:p-10">
             <p className="text-sm font-semibold text-brand-600">{job.company}</p>
             <h1 className="mt-3 break-words text-3xl font-bold tracking-tight sm:text-4xl">{job.title}</h1>
@@ -30,6 +30,7 @@ export default function JobDetails({ jobId }: { jobId: string }) {
             {amounts.length > 0 && <p className="mt-3 text-sm font-semibold text-slate-700">{salary?.currency} {amounts.join(" – ")}</p>}
             {job.expiration_date && <p className="mt-3 text-sm text-slate-500">Apply by {job.expiration_date.slice(0, 10)}</p>}
             <Link className={`${button} mt-6 w-full sm:w-auto`} href={`/apply/${jobId}`}>Apply for this role</Link>
+            <Link className="mt-4 block text-sm font-semibold text-brand-600" href={`/applications/${jobId}`}>Already applied? View your application</Link>
           </header>
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_260px]">
             <div className="min-w-0 space-y-6">{sections.filter(([, text]) => text).map(([title, text]) =>

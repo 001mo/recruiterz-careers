@@ -146,3 +146,39 @@ test('client requests honor cancellation and cannot stay pending indefinitely', 
   } } });
   await assert.rejects(api.intakeRequest('5', '/submit'), { name: 'TimeoutError' });
 });
+
+
+test('progress access keeps the challenge private and never forwards staff or previous candidate credentials', async () => {
+  const response = await route({ recruiterz_careers_intake_5: 'previous-session', recruiterz_token: 'staff-secret' }, async (url, options) => {
+    assert.equal(url, '/candidates/jobs/5/intake/access');
+    assert.equal(options.token, undefined);
+    return { challenge: 'private-challenge', message: 'If an application matches, a code has been sent.' };
+  }).POST(request('access', { email: 'candidate@example.test' }), context('access'));
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).challenge, undefined);
+  assert.equal(response.cookieWrites[0][2].httpOnly, true);
+  assert.equal(response.cookieWrites[0][2].path, '/api/intake/5/');
+  assert.equal(response.cookieWrites[1][2].maxAge, 0);
+});
+test('progress can resume verification, but withdrawal always requires the candidate session', async () => {
+  const pending = route({ recruiterz_careers_intake_challenge_5: 'challenge', recruiterz_token: 'staff-secret' }, async () => { throw new Error('Must not proxy'); });
+  const response = await pending.GET(new Request('https://app.example.com/api/intake/5/progress'), context('progress'));
+  assert.deepEqual(await response.json(), { data: { verification_pending: true } });
+  assert.equal((await pending.POST(request('withdraw', { expected_version: 4 }), context('withdraw'))).status, 401);
+  assert.equal((await pending.POST(request('withdraw', {}, 'https://evil.example'), context('withdraw'))).status, 403);
+});
+test('withdrawal forwards the expected version and candidate token through an explicit route', async () => {
+  const handlers = route({ recruiterz_careers_intake_5: 'candidate-token', recruiterz_token: 'staff-secret' }, async (url, options) => {
+    assert.equal(url, '/candidates/jobs/5/intake/withdraw');
+    assert.equal(options.token, 'candidate-token');
+    assert.deepEqual(JSON.parse(options.body), { expected_version: 4 });
+    return { data: { status: 'withdrawn', version: 5, can_withdraw: false } };
+  });
+  const response = await handlers.POST(request('withdraw', { expected_version: 4 }), context('withdraw'));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.status, 'withdrawn');
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal(intake.resolveIntakeRoute('5', ['progress'], 'GET'), '/candidates/jobs/5/intake/progress');
+  assert.equal(intake.resolveIntakeRoute('5', ['progress'], 'POST'), null);
+  assert.equal(intake.resolveIntakeRoute('5', ['withdraw'], 'GET'), null);
+});

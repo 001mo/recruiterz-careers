@@ -49,10 +49,10 @@ async function handler(request: Request, context: { params: Promise<{ job: strin
     const message = "Your verification code has expired. Request a new code and try again.";
     return finish(NextResponse.json({ message, errors: { code: [message] } }, { status: 422 }));
   }
-  if (action === "session" && !token && jar.get(challengeName)?.value) {
+  if (["session", "progress"].includes(action) && !token && jar.get(challengeName)?.value) {
     return finish(NextResponse.json({ data: { verification_pending: true } }));
   }
-  if (action && !["start", "verify"].includes(action) && !token) return finish(NextResponse.json({ message: "Verify your email to continue." }, { status: 401 }));
+  if (action && !["start", "access", "verify"].includes(action) && !token) return finish(NextResponse.json({ message: "Verify your email to continue." }, { status: 401 }));
   try {
     let body: BodyInit | undefined;
     const headers = new Headers();
@@ -73,11 +73,11 @@ async function handler(request: Request, context: { params: Promise<{ job: strin
         headers.set("Content-Type", "application/json");
       }
     }
-    const payload = await laravelFetch<{ token?: string; challenge?: string; data?: unknown; message?: string }>(path, { method: request.method, body, headers, signal: AbortSignal.timeout(30_000), token: ["start", "verify"].includes(action) ? undefined : token });
+    const payload = await laravelFetch<{ token?: string; challenge?: string; data?: unknown; message?: string }>(path, { method: request.method, body, headers, signal: AbortSignal.timeout(30_000), token: ["start", "access", "verify"].includes(action) ? undefined : token });
     // Secret values cross only the server boundary and HttpOnly cookies.
     const { token: nextToken, challenge, ...visible } = payload;
-    const response = NextResponse.json(visible, { status: request.method === "POST" && ["start", "documents"].includes(action) ? 201 : 200 });
-    if (action === "start" && challenge) {
+    const response = NextResponse.json(visible, { status: request.method === "POST" && ["start", "access", "documents"].includes(action) ? 201 : 200 });
+    if (["start", "access"].includes(action) && challenge) {
       response.cookies.set(challengeName, challenge, { ...cookieOptions, maxAge: 600 });
       response.cookies.set(tokenName, "", { ...cookieOptions, maxAge: 0 });
       response.cookies.set(recoveryName, randomBytes(32).toString("hex"), { ...cookieOptions, maxAge: 600 });
