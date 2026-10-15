@@ -4,6 +4,8 @@ The candidate-facing Recruiterz application. This repository uses `main` and the
 
 ## Stack
 
+For hosted staging, follow [the Laravel Cloud guide](docs/laravel-cloud.md).
+
 - Next.js 16.3.4 with the App Router and React 19.2.8
 - TypeScript 5 and Tailwind CSS 4
 - TanStack Query 5 and Radix UI 1
@@ -84,9 +86,10 @@ npm test
 npm run check
 npm run build
 npm start
+npm run start:local
 ```
 
-`check` runs lint, Next.js type generation, TypeScript, and the focused intake/origin/error regressions. Run the production build separately. The scripts work in Windows shells without POSIX environment assignments.
+`check` runs lint, Next.js type generation, TypeScript, and the focused intake/origin/error regressions. Run the production build separately. `npm start` respects the host's `PORT` (default 3000); use `npm run start:local` to match the local port 3001 and `APP_ORIGIN`. The scripts work in Windows shells without POSIX environment assignments.
 
 ## Application progress
 
