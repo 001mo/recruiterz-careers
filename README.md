@@ -4,7 +4,9 @@ The candidate-facing Recruiterz application. This repository uses `main` and the
 
 ## Stack
 
-For hosted staging, follow [the Laravel Cloud guide](docs/laravel-cloud.md).
+For the existing Vercel frontend / Laravel Cloud API deployment, follow
+[the Vercel guide](docs/vercel.md), including the private bucket's Careers origin.
+The [Laravel Cloud frontend guide](docs/laravel-cloud.md) remains an alternative.
 
 - Next.js 16.3.4 with the App Router and React 19.2.8
 - TypeScript 5 and Tailwind CSS 4

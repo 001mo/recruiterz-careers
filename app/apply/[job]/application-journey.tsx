@@ -7,8 +7,9 @@ import CareersShell from "@/components/careers-shell";
 import ApplicationReceipt from "@/components/application-receipt";
 import MessagePopup from "@/components/ui/message-popup";
 import { ProfileFields, QuestionFields } from "@/components/applications/intake-fields";
-import { IntakeError, intakeRequest, type IntakeConfiguration, type IntakeFile, type IntakeReceipt, type IntakeSession, type IntakePending, type ProfileValues, type QuestionAnswers } from "@/lib/intake";
+import { IntakeError, intakeRequest, type IntakeConfiguration, type IntakeReceipt, type IntakeSession, type IntakePending, type ProfileValues, type QuestionAnswers } from "@/lib/intake";
 import { unexpectedErrorMessage } from "@/lib/errors";
+import { createIntakeUploader } from "@/lib/intake-upload";
 
 const button = "rounded-xl bg-brand-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50";
 const secondary = "rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 hover:border-brand-300 disabled:opacity-50";
@@ -24,6 +25,7 @@ export default function ApplicationJourney({ jobId }: { jobId: string }) {
   const [error, setError] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
+  const uploadDocument = useRef(createIntakeUploader());
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
@@ -116,9 +118,11 @@ export default function ApplicationJourney({ jobId }: { jobId: string }) {
 
   async function upload(key: string, file: File) {
     await run(async () => {
-      const body = new FormData(); body.set("key", key); body.set("file", file);
-      const result = await intakeRequest<{ data: IntakeFile }>(jobId, "/documents", { method: "POST", body });
-      setSession(current => current && { ...current, documents: [...current.documents, result.data] });
+      if (!session) return;
+      const slot = session.processes.flatMap(process => process.documents).find(slot => slot.key === key);
+      if (slot && file.size > slot.max_size_mb * 1024 * 1024) throw new IntakeError(`Select a file no larger than ${slot.max_size_mb} MB.`, 422);
+      const document = await uploadDocument.current(jobId, key, file, session.expires_at);
+      setSession(current => current && { ...current, documents: [...current.documents.filter(file => file.id !== document.id), document] });
     }, "upload");
   }
 

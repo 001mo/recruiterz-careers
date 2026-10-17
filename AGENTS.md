@@ -4,7 +4,7 @@ Candidate-facing Next.js app. Work on `main` unless the user requests another br
 
 - Match the framework choices in `001mo/recruiterz-app`: App Router, React, TypeScript, Tailwind CSS 4, TanStack Query, and Radix UI. Use npm and commit the lockfile.
 - Keep employer/candidate layouts separate from the recruiter dashboard. Reuse design conventions and small UI primitives, not recruiter authentication or navigation.
-- Laravel owns application validation, availability, uploads, and transitions. Browser requests go through the allowlisted Next.js BFF.
+- Laravel owns application validation, availability, uploads, and transitions. Application requests go through the allowlisted Next.js BFF. Document bytes may go directly to private storage using a short-lived, single-object PUT URL issued by Laravel; acceptance still requires the authenticated BFF completion endpoint.
 - Applicant secrets belong only in job-scoped HttpOnly cookies. Never use a recruiter token, public environment variable, localStorage, or URL for an applicant token.
 - Preserve the explicit APP_ORIGIN policy for writes, including HTTPS tunnels. Never trust arbitrary forwarded headers.
 - Return "Something went wrong" for unexpected production failures. Show validation feedback through MessagePopup and offer retries where appropriate.

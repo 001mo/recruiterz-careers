@@ -76,6 +76,10 @@ async function handler(request: Request, context: { params: Promise<{ job: strin
     const payload = await laravelFetch<{ token?: string; challenge?: string; data?: unknown; message?: string }>(path, { method: request.method, body, headers, signal: AbortSignal.timeout(30_000), token: ["start", "access", "verify"].includes(action) ? undefined : token });
     // Secret values cross only the server boundary and HttpOnly cookies.
     const { token: nextToken, challenge, ...visible } = payload;
+    // An accidentally configured local disk must not send large bodies to Vercel.
+    if (process.env.VERCEL && action === "document-uploads" && visible.data && typeof visible.data === "object" && "transport" in visible.data && visible.data.transport === "proxy") {
+      visible.data = { ...visible.data, max_size: 4 * 1024 * 1024 };
+    }
     const response = NextResponse.json(visible, { status: request.method === "POST" && ["start", "access", "documents"].includes(action) ? 201 : 200 });
     if (["start", "access"].includes(action) && challenge) {
       response.cookies.set(challengeName, challenge, { ...cookieOptions, maxAge: 600 });

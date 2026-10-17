@@ -182,3 +182,31 @@ test('withdrawal forwards the expected version and candidate token through an ex
   assert.equal(intake.resolveIntakeRoute('5', ['progress'], 'POST'), null);
   assert.equal(intake.resolveIntakeRoute('5', ['withdraw'], 'GET'), null);
 });
+
+test('direct upload routes allow only JSON prepare and UUID completion with the candidate cookie', async () => {
+  const id = '11111111-2222-3333-4444-555555555555';
+  for (const args of [['5', ['document-uploads', 'bad', 'complete'], 'POST'], ['5', ['document-uploads', id, 'complete'], 'GET'], ['5', ['document-uploads', id, 'complete', 'extra'], 'POST']]) {
+    assert.equal(intake.resolveIntakeRoute(...args), null);
+  }
+  const paths = [];
+  const handlers = route({ recruiterz_careers_intake_5: 'candidate', recruiterz_token: 'staff' }, async (url, options) => {
+    paths.push(url); assert.equal(options.token, 'candidate'); assert.equal(options.headers.get('Content-Type'), 'application/json');
+    assert.equal(typeof options.body, 'string'); return { data: { transport: 'direct', url: 'https://objects.example.test/one' } };
+  });
+  for (const parts of [['document-uploads'], ['document-uploads', id, 'complete']]) {
+    const response = await handlers.POST(request(parts.join('/')), context(...parts));
+    assert.equal(response.status, 200); assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+    assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer');
+    assert.equal((await route().POST(request(parts.join('/')), context(...parts))).status, 401);
+    assert.equal((await handlers.POST(request(parts.join('/'), {}, 'https://evil.example'), context(...parts))).status, 403);
+  }
+  assert.deepEqual(paths, ['/candidates/jobs/5/intake/document-uploads', `/candidates/jobs/5/intake/document-uploads/${id}/complete`]);
+  assert.equal((await handlers.POST(request('document-uploads', { data: 'x'.repeat(513 * 1024) }), context('document-uploads'))).status, 413);
+});
+test('Vercel limits a local-disk fallback without changing direct grants', async t => {
+  const previous = process.env.VERCEL; process.env.VERCEL = '1';
+  t.after(() => { if (previous === undefined) delete process.env.VERCEL; else process.env.VERCEL = previous; });
+  const handlers = route({ recruiterz_careers_intake_5: 'candidate' }, async () => ({ data: { transport: 'proxy' } }));
+  const response = await handlers.POST(request('document-uploads'), context('document-uploads'));
+  assert.deepEqual(await response.json(), { data: { transport: 'proxy', max_size: 4 * 1024 * 1024 } });
+});
